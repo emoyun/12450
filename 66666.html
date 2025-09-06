@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>种萝卜游戏</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #4CAF50;
+            text-align: center;
+        }
+        .command-input {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        #command {
+            flex-grow: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px 0 0 4px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #output {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            min-height: 200px;
+            white-space: pre-line;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+        .command-list {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>种萝卜游戏</h1>
+        <div class="command-input">
+            <input type="text" id="command" placeholder="输入指令，例如：查农场">
+            <button onclick="executeCommand()">执行</button>
+        </div>
+        <div id="output">欢迎来到种萝卜游戏！请输入指令开始游戏。</div>
+
+        <div class="command-list">
+            <p>可用指令：</p>
+            <p>1. 查农场</p>
+            <p>2. 种萝卜</p>
+            <p>3. 收萝卜</p>
+            <p>4. 卖萝卜X（例如：卖萝卜100）</p>
+            <p>5. 买萝卜X（例如：买萝卜50）</p>
+            <p>6. 升级农场X（例如：升级农场2）</p>
+            <p>7. 存入X（例如：存入100）</p>
+            <p>8. 取出X（例如：取出50）</p>
+            <p>9. 领取利息</p>
+            <p>10. 搏一搏X（例如：搏一搏100）</p>
+        </div>
+    </div>
+
+<script>
+/* ========== 游戏数据 ========== */
+const gameData = {
+    farmLevel: 1,
+    flowingCarrots: 0,
+    coins: 100,
+    bankCarrots: 0,
+    dailyInterestRate: 0.05,
+    plantedCarrots: 0,
+    harvestTime: null,
+    lastInterestClaim: null
+};
+
+/* ========== 指令映射表 ========== */
+const COMMAND_MAP = [
+    { id: 1, keys: ['查农场'],        fn: checkFarm,           needArg: false },
+    { id: 2, keys: ['种萝卜'],        fn: plantCarrots,        needArg: false },
+    { id: 3, keys: ['收萝卜'],        fn: harvestCarrots,      needArg: false },
+    { id: 4, keys: ['卖萝卜'],        fn: sellCarrots,         needArg: true  },
+    { id: 5, keys: ['买萝卜'],        fn: buyCarrots,          needArg: true  },
+    { id: 6, keys: ['升级农场'],      fn: upgradeFarm,         needArg: true  },
+    { id: 7, keys: ['存入'],          fn: depositCarrots,      needArg: true  },
+    { id: 8, keys: ['取出'],          fn: withdrawCarrots,     needArg: true  },
+    { id: 9, keys: ['领取利息'],      fn: claimInterest,       needArg: false },
+    { id: 10,keys: ['搏一搏'],        fn: gamble,              needArg: true  },
+    { id: 0, keys: ['收萝卜X'],       fn: harvestCarrotsImmediately, needArg: false }
+];
+
+/* ========== 解析输入 ========== */
+function parseInput(raw) {
+    raw = raw.trim();
+    if (!raw) return null;
+
+    const parts = raw.split(/\s+/);
+    if (parts.length >= 2 && /^\d+$/.test(parts[0])) {
+        const id = Number(parts[0]);
+        const arg = parts.slice(1).join(' ');
+        return { id, arg };
+    }
+
+    const idNum = Number(raw);
+    if (!isNaN(idNum) && idNum >= 0) return { id: idNum, arg: '' };
+
+    for (const cmd of COMMAND_MAP) {
+        for (const key of cmd.keys) {
+            if (raw.startsWith(key)) {
+                const arg = raw.slice(key.length).trim();
+                return { id: cmd.id, arg };
+            }
+        }
+    }
+    return null;
+}
+
+/* ========== 主入口 ========== */
+function executeCommand() {
+    const commandInput = document.getElementById('command');
+    const raw = commandInput.value.trim();
+    if (!raw) return;
+
+    const parsed = parseInput(raw);
+    if (!parsed) {
+        document.getElementById('output').textContent = '无效的命令，请检查输入！';
+        commandInput.value = '';
+        return;
+    }
+
+    const { id, arg } = parsed;
+    const cmd = COMMAND_MAP.find(c => c.id === id);
+    if (!cmd) {
+        document.getElementById('output').textContent = '无效的命令编号！';
+        commandInput.value = '';
+        return;
+    }
+
+    const numArg = cmd.needArg ? Number(arg) : undefined;
+    if (cmd.needArg && (isNaN(numArg) || numArg < 0)) {
+        document.getElementById('output').textContent = `请输入有效的 ${cmd.keys[0]} 数量！`;
+        commandInput.value = '';
+        return;
+    }
+
+    let result;
+    try {
+        result = cmd.fn(cmd.needArg ? numArg : undefined);
+    } catch (e) {
+        result = '执行失败：' + e.message;
+    }
+    document.getElementById('output').textContent = result;
+    commandInput.value = '';
+}
+
+/* ========== 回车键 ========== */
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('command').addEventListener('keypress', e => {
+        if (e.key === 'Enter') executeCommand();
+    });
+});
+
+/* ========== 业务函数（全部保持原实现） ========== */
+function checkFarm() { return `农场等级: ${gameData.farmLevel}\n流动萝卜: ${gameData.flowingCarrots}\n萝卜币: ${gameData.coins}\n银行里的萝卜: ${gameData.bankCarrots}\n当前银行日利率: ${(gameData.dailyInterestRate * 100).toFixed(2)}%`;
+}
+function plantCarrots() {
+    if (gameData.plantedCarrots > 0 && Date.now() < gameData.harvestTime) {
+        return '你已经种过萝卜了，请等待收获！';
+    }
+    const baseMin = 20, baseMax = 45;
+    const plantedAmount = Math.floor(Math.random() * (baseMax - baseMin + 1) + baseMin) * gameData.farmLevel;
+    const harvestTimeSeconds = Math.floor(Math.random() * 301) + 300;
+    gameData.plantedCarrots = plantedAmount;
+    gameData.harvestTime = Date.now() + harvestTimeSeconds * 1000;
+    const harvestDate = new Date(gameData.harvestTime);
+    const hh = harvestDate.getHours().toString().padStart(2, '0');
+    const mm = harvestDate.getMinutes().toString().padStart(2, '0');
+    return `你种了 ${plantedAmount} 个萝卜，预计在 ${hh}:${mm} 可以收获！`;
+ }
+function harvestCarrots() {
+    if (gameData.plantedCarrots === 0) return '你还没有种萝卜！';
+    if (Date.now() < gameData.harvestTime) {
+        const remain = Math.ceil((gameData.harvestTime - Date.now()) / 1000);
+        return `萝卜还没成熟，还需要 ${remain} 秒才能收获！`;
+    }
+    const amt = gameData.plantedCarrots;
+    gameData.flowingCarrots += amt;
+    gameData.plantedCarrots = 0;
+    gameData.harvestTime = null;
+    return `你成功收获了 ${amt} 个萝卜！`;
+ }
+function harvestCarrotsImmediately() { 
+    if (gameData.plantedCarrots === 0) return '你还没有种萝卜！';
+    const amt = gameData.plantedCarrots;
+    gameData.flowingCarrots += amt;
+    gameData.plantedCarrots = 0;
+    gameData.harvestTime = null;
+    return `（测试指令）你立即收获了 ${amt} 个萝卜！`;
+ }
+function sellCarrots(amount) {
+    if (amount > gameData.flowingCarrots) return '你没有足够的萝卜！';
+    const price = Math.floor(Math.random() * 6) + 20;
+    const earn = amount * price;
+    gameData.flowingCarrots -= amount;
+    gameData.coins += earn;
+    return `你以 ${price} 萝卜币/个的价格卖出了 ${amount} 个萝卜，获得了 ${earn} 萝卜币！`;
+ }
+function buyCarrots(amount) { 
+    const cost = amount * 25;
+    if (cost > gameData.coins) return '你没有足够的萝卜币！';
+    gameData.coins -= cost;
+    gameData.flowingCarrots += amount;
+    return `你以 25 萝卜币/个的价格购买了 ${amount} 个萝卜！`;
+}
+function upgradeFarm(levels) {
+    if (levels <= 0) return '请输入有效的升级等级！';
+    const base = 100;
+    let total = 0;
+    for (let i = 0; i < levels; i++) {
+        total += base * Math.pow(gameData.farmLevel + i, 2);
+    }
+    if (total > gameData.coins) return `你没有足够的萝卜币！需要 ${total} 萝卜币。`;
+    gameData.coins -= total;
+    gameData.farmLevel += levels;
+    return `你成功将农场升级了 ${levels} 级，现在农场等级为 ${gameData.farmLevel}！`;
+}
+function depositCarrots(amount) {
+    if (amount > gameData.flowingCarrots) return '你没有足够的萝卜！';
+    gameData.flowingCarrots -= amount;
+    gameData.bankCarrots += amount;
+    updateInterestRate();
+    return `你成功存入了 ${amount} 个萝卜到银行！`;
+ }
+function withdrawCarrots(amount) { 
+    if (amount > gameData.bankCarrots) return '银行里没有足够的萝卜！';
+    gameData.bankCarrots -= amount;
+    gameData.flowingCarrots += amount;
+    updateInterestRate();
+    return `你成功从银行取出了 ${amount} 个萝卜！`;
+ }
+function claimInterest() { 
+    if (amount > gameData.bankCarrots) return '银行里没有足够的萝卜！';
+    gameData.bankCarrots -= amount;
+    gameData.flowingCarrots += amount;
+    updateInterestRate();
+    return `你成功从银行取出了 ${amount} 个萝卜！`;
+}
+function gamble(amount) { 
+    if (amount > gameData.coins) return '你没有足够的萝卜币！';
+    const n = Math.floor(Math.random() * 10) + 1;
+    if (n % 2 === 0) {
+        gameData.coins += amount;
+        return `搏一搏成功！随机数是 ${n}(偶数)，你获得了 ${amount} 萝卜币！`;
+    } else {
+        gameData.coins -= amount;
+        return `搏一搏失败！随机数是 ${n}(奇数)，你失去了 ${amount} 萝卜币！`;
+    }
+}
+function updateInterestRate() {
+    if (gameData.bankCarrots < 500) gameData.dailyInterestRate = 0.05;
+    else if (gameData.bankCarrots >= 1e8) gameData.dailyInterestRate = 0.3;
+    else {
+        const ratio = (gameData.bankCarrots - 500) / (1e8 - 500);
+        gameData.dailyInterestRate = 0.05 + 0.25 * ratio;
+    }
+}
+
+/* ========== 暴露到全局供行内事件使用 ========== */
+window.executeCommand = executeCommand;
+</script>
+</body>
+</html>
